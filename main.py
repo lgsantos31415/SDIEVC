@@ -18,8 +18,6 @@ except Exception as e:
     exit()
 
 # --- MAPEAMENTO DE CLASSES (FEITO UMA VEZ) ---
-# Dicionário para armazenar os IDs das classes que nos interessam
-# O valor será -1 se a classe não for encontrada no modelo
 class_ids = {
     "Hardhat": -1, "Mask": -1, "NO-Hardhat": -1, "NO-Mask": -1,
     "NO-Safety Vest": -1, "Person": -1, "Safety Vest": -1
@@ -90,22 +88,22 @@ while True:
         any_no_ppe = no_hardhat or no_mask or no_vest
         is_correct = wears_all_ppe and not any_no_ppe
 
-    # --- DESENHA A LISTA DE STATUS DAS CLASSES COM FUNDO ---
+    # --- DESENHA A LISTA DE ITENS (CANTO SUPERIOR DIREITO) ---
     font_scale = 0.5
     font_thickness = 1
-    line_height = int(font_scale * 45)
     margin = 10
-    box_width = 200
-
+    
     ppe_list = [
         ("Capacete", "Hardhat", "NO-Hardhat"), ("Mascara", "Mask", "NO-Mask"),
         ("Colete", "Safety Vest", "NO-Safety Vest"), ("Pessoa", "Person", None)
     ]
-    num_lines = len(ppe_list) + 1 if person_detected else len(ppe_list)
     
+    box_width = 200
+    line_height_top = int(font_scale * 45)
+    num_lines = len(ppe_list)
     box_x1 = frame.shape[1] - box_width - margin
     box_y1 = margin
-    box_h = (num_lines * line_height)
+    box_h = (num_lines * line_height_top)
     box_y2 = min(box_y1 + box_h, frame.shape[0] - 1)
     box_x2 = frame.shape[1] - margin
 
@@ -115,17 +113,15 @@ while True:
         res = cv2.addWeighted(sub_img, 0.5, black_rect, 0.5, 1.0)
         frame[box_y1:box_y2, box_x1:box_x2] = res
 
-    label_y_pos = box_y1 + line_height - (margin // 2)
-
+    label_y_pos = box_y1 + line_height_top - (margin // 2)
     for display_name, pos_class, neg_class in ppe_list:
         is_detected = class_ids.get(pos_class, -1) in detected_classes_ids
         is_neg_detected = neg_class and class_ids.get(neg_class, -1) in detected_classes_ids
         
         text_color = (0, 255, 0) if is_detected else (200, 200, 200)
-
         if is_neg_detected:
             text_color = (255, 255, 255)
-            line_y1 = label_y_pos - line_height + margin
+            line_y1 = label_y_pos - line_height_top + margin
             line_y2 = label_y_pos + (margin//2)
             line_roi = frame[line_y1:line_y2, box_x1:box_x2]
             if line_roi.size > 0:
@@ -134,25 +130,34 @@ while True:
                 frame[line_y1:line_y2, box_x1:box_x2] = line_res
         
         cv2.putText(frame, display_name, (box_x1 + 10, label_y_pos), cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_color, font_thickness)
-        label_y_pos += line_height
+        label_y_pos += line_height_top
 
+    # --- DESENHA O STATUS FINAL (CANTO INFERIOR DIREITO) ---
     if person_detected:
-        separator_y = label_y_pos - line_height
-        cv2.line(frame, (box_x1, separator_y), (box_x2, separator_y), (255, 255, 255), 1)
-
-        status_text = "Status: Correto" if is_correct else "Status: Incorreto"
-        status_color = (0, 255, 0) if is_correct else (255, 255, 255)
-
-        if not is_correct:
-            line_y1 = label_y_pos - line_height + (margin//2)
-            line_y2 = label_y_pos + margin
-            line_roi = frame[line_y1:line_y2, box_x1:box_x2]
-            if line_roi.size > 0:
-                red_rect = np.full(line_roi.shape, (0, 0, 200), dtype=np.uint8)
-                line_res = cv2.addWeighted(line_roi, 0.2, red_rect, 0.8, 1.0)
-                frame[line_y1:line_y2, box_x1:box_x2] = line_res
+        status_text = "Status: Correto"
+        bg_color = (0, 120, 0)  # Verde escuro
+        text_color = (0, 255, 0) # Verde claro
         
-        cv2.putText(frame, status_text, (box_x1 + 10, label_y_pos), cv2.FONT_HERSHEY_SIMPLEX, font_scale, status_color, font_thickness)
+        if not is_correct:
+            status_text = "Status: Incorreto"
+            bg_color = (0, 0, 120)  # Vermelho escuro
+            text_color = (255, 255, 255) # Branco
+
+        line_height_bottom = int(font_scale * 60)
+        status_box_w = 220
+        s_box_x1 = frame.shape[1] - status_box_w - margin
+        s_box_y1 = frame.shape[0] - line_height_bottom - margin
+        s_box_x2 = frame.shape[1] - margin
+        s_box_y2 = frame.shape[0] - margin
+        
+        status_roi = frame[s_box_y1:s_box_y2, s_box_x1:s_box_x2]
+        if status_roi.size > 0:
+            color_rect = np.full(status_roi.shape, bg_color, dtype=np.uint8)
+            res = cv2.addWeighted(status_roi, 0.4, color_rect, 0.6, 1.0)
+            frame[s_box_y1:s_box_y2, s_box_x1:s_box_x2] = res
+        
+        text_y = s_box_y1 + int(line_height_bottom * 0.65)
+        cv2.putText(frame, status_text, (s_box_x1 + 10, text_y), cv2.FONT_HERSHEY_SIMPLEX, font_scale + 0.1, text_color, font_thickness + 1)
 
     # --- AJUSTA O FRAME PARA TELA CHEIA MANTENDO A PROPORÇÃO ---
     h, w, _ = frame.shape
